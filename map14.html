@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>马德里 3D 纪念碑巡游 (手动控制版)</title>
+<meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+
+<script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+<link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+
+<style>
+    body { margin: 0; padding: 0; font-family: 'Helvetica Neue', Arial, Helvetica, sans-serif; overflow: hidden; }
+    #map { position: absolute; top: 0; bottom: 0; width: 100%; height: 100%; }
+    
+    /* 标记样式 */
+    .marker {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background-color: #ff3333; 
+        border: 3px solid #fff;
+        box-shadow: 0 0 15px rgba(0,0,0,0.6); 
+        cursor: pointer;
+        z-index: 10;
+        transition: transform 0.2s;
+    }
+    .marker:hover {
+        transform: scale(1.4);
+        background-color: #ff0000;
+    }
+
+    /* 弹窗样式 */
+    .mapboxgl-popup-content {
+        background-color: rgba(255, 255, 255, 0.95); 
+        color: #333;
+        padding: 0; 
+        border-radius: 8px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        width: 320px;
+        max-width: 90vw;
+        max-height: 400px; 
+        display: flex;
+        flex-direction: column;
+        overflow: hidden; 
+        backdrop-filter: blur(5px);
+    }
+    
+    .mapboxgl-popup-close-button { display: none; }
+    .mapboxgl-popup { z-index: 20; }
+
+    .popup-text-area {
+        padding: 20px 20px 10px 20px;
+        overflow-y: auto; 
+        flex-grow: 1;
+    }
+
+    .popup-title {
+        font-size: 1.3em;
+        font-weight: bold;
+        margin-top: 0;
+        margin-bottom: 10px;
+        color: #b91c1c;
+        border-bottom: 1px solid #ddd;
+        padding-bottom: 8px;
+    }
+    
+    .popup-body ul {
+        padding-left: 20px;
+        margin: 0;
+    }
+    .popup-body li {
+        margin-bottom: 8px;
+        font-size: 0.95em;
+        line-height: 1.5;
+    }
+
+    /* 按钮样式优化：增加点击反馈 */
+    .close-tour-btn {
+        background-color: #b91c1c;
+        color: white;
+        border: none;
+        padding: 14px;
+        cursor: pointer;
+        font-weight: bold;
+        text-transform: uppercase;
+        font-size: 0.9em;
+        text-align: center;
+        width: 100%;
+        flex-shrink: 0;
+        transition: background-color 0.2s, transform 0.1s;
+    }
+    .close-tour-btn:hover {
+        background-color: #991b1b;
+    }
+    .close-tour-btn:active {
+        transform: scale(0.98); /* 点击时轻微缩小 */
+    }
+    
+    /* 初始引导层 */
+    #intro-overlay {
+        position: absolute;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.7);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 100;
+        color: white;
+        text-align: center;
+    }
+    #start-btn {
+        padding: 15px 30px;
+        font-size: 1.2em;
+        background: #e74c3c;
+        border: none;
+        color: white;
+        border-radius: 5px;
+        cursor: pointer;
+        margin-top: 20px;
+    }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="intro-overlay">
+    <div>
+        <h1>Madrid Monument 3D Tour</h1>
+        <p>Explore the history of the Spanish Empire through Madrid's monuments.</p>
+        <button id="start-btn">Start Tour ▶</button>
+    </div>
+</div>
+
+<script>
+    mapboxgl.accessToken = 'pk.eyJ1IjoiamVyZW15bWlyYWNsZSIsImEiOiJjbWozN2o5ODYweDF6M2RyN3NyMGVrNmxiIn0.BrrzfegSr1shj34MQNZf3g'; 
+
+    const monumentData = [
+        { 
+            key: "cortes", 
+            name: "Bust of Hernán Cortés", 
+            lng: -3.7256, 
+            lat: 40.4368, 
+            description: `
+                <ul>
+                    <li><strong>Hernán Cortés (1485–1547)</strong></li>
+                    <li>Led the Spanish conquest of the Aztec Empire in Mexico (1519–1521).</li>
+                    <li>Operated as a military commander and colonial administrator.</li>
+                    <li>Campaign involved warfare, alliances and coercion.</li>
+                    <li>Seized and redistributed wealth/resources.</li>
+                    <li>Frequently framed as a decisive “conqueror”.</li>
+                </ul>`
+        },
+        { 
+            key: "balboa", 
+            name: "Monument to Vasco Núñez de Balboa", 
+            lng: -3.7212, 
+            lat: 40.4380, 
+            description: `
+                <ul>
+                    <li><strong>Vasco Núñez de Balboa (1475-1519)</strong></li>
+                    <li>Helped establish Spain’s presence in the Caribbean.</li>
+                    <li>Acted both as explorer and colonial governor.</li>
+                    <li>Led European discovery of Pacific ocean in 1513.</li>
+                </ul>`
+        },
+        { 
+            key: "columbus", 
+            name: "Monument to Christopher Columbus", 
+            lng: -3.6905, 
+            lat: 40.4252, 
+            description: `
+                <ul>
+                    <li>Columbus’ voyage in 1492 initiated European colonisation of the Americas.</li>
+                    <li>Inspired model of discovery and claiming of indigenous lands.</li>
+                    <li>Established systems of exploitation during time as governor.</li>
+                    <li>Glorification of his discoveries in this monument.</li>
+                </ul>`
+        },
+        { 
+            key: "jorgeJuan", 
+            name: "Monument to Jorge Juan", 
+            lng: -3.6882, 
+            lat: 40.4245, 
+            description: `
+                <ul>
+                    <li><strong>Jorge Juan (1713–1773)</strong> - Spanish naval officer and scientist.</li>
+                    <li>Served the Crown in imperial contexts.</li>
+                    <li>Conducted major work in geodesy/astronomy and navigation.</li>
+                    <li>Associated with naval engineering and shipbuilding reform.</li>
+                </ul>`
+        },
+        { 
+            key: "neptuno", 
+            name: "Fountain of Neptuno", 
+            lng: -3.6941, 
+            lat: 40.4152, 
+            description: `
+                <strong>Why</strong><br>To Project "Total Control" over Seas, Earth, and Mind.<br><br>
+                <strong>Significance</strong>
+                <ul>
+                    <li><strong>Maritime Defense:</strong> Empire's survival depended on Navy.</li>
+                    <li><strong>Economic Reform:</strong> Shift from extraction to production.</li>
+                    <li><strong>Scientific Mastery:</strong> Positioned next to Royal Botanical Garden.</li>
+                </ul>`
+        },
+        { 
+            key: "bazan", 
+            name: "Monument of Álvaro de Bazán", 
+            lng: -3.7104, 
+            lat: 40.4151, 
+            description: `
+                <strong>WHY?</strong>
+                <ul>
+                    <li>Protected the Treasure Fleets.</li>
+                    <li>Designed the War Galleon.</li>
+                    <li>Secured the Atlantic Route.</li>
+                </ul>
+                <strong>SIGNIFICANCE</strong>
+                <ul>
+                    <li>Funded the Capital with American silver.</li>
+                    <li>Ensured Global Stability for the empire.</li>
+                    <li>Symbol of Naval Power.</li>
+                </ul>`
+        },
+        { 
+            key: "cuba", 
+            name: "Monument to Cuba", 
+            lng: -3.6815, 
+            lat: 40.4193, 
+            description: `
+                <strong>Monument in El Retiro</strong>
+                <ul>
+                    <li>Statues of Columbus, Isabella I and Cuba personification.</li>
+                    <li>Cuban and spanish coat of arms.</li>
+                    <li>Opened 1952.</li>
+                </ul>`
+        },
+        { 
+            key: "discovery", 
+            name: "Monument to the Discovery of America", 
+            lng: -3.6882, 
+            lat: 40.4248, 
+            description: `
+                <ul>
+                    <li>Built in 1977.</li>
+                    <li>Describes the history of how Columbus discovered América.</li>
+                    <li>Pays tribute to the ocean and exploration.</li>
+                    <li>Represents Spain, The Canary Islands and América.</li>
+                </ul>`
+        },
+        { 
+            key: "lezo", 
+            name: "Monument to Blas de Lezo", 
+            lng: -3.6886, 
+            lat: 40.4243, 
+            description: `
+                <ul>
+                    <li>Monument from 2014.</li>
+                    <li>Spanish admiral (1689-1741).</li>
+                    <li>Lost left leg, right arm and left eye.</li>
+                    <li>Won the battle of Cartagena (1741) against the British.</li>
+                </ul>`
+        }
+    ];
+
+    try {
+        const map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/satellite-streets-v12', 
+            center: [-3.7038, 40.4168], 
+            zoom: 13,
+            pitch: 60, 
+            bearing: -17.6,
+            antialias: true 
+        });
+
+        map.addControl(new mapboxgl.NavigationControl());
+
+        map.on('style.load', () => {
+            // 添加地形
+            map.addSource('mapbox-dem', {
+                'type': 'raster-dem',
+                'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
+                'tileSize': 512,
+                'maxzoom': 14
+            });
+            map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
+
+            // 添加 3D 建筑
+            const layers = map.getStyle().layers;
+            const labelLayerId = layers.find(
+                (layer) => layer.type === 'symbol' && layer.layout['text-field']
+            ).id;
+
+            map.addLayer(
+                {
+                    'id': 'add-3d-buildings',
+                    'source': 'composite',
+                    'source-layer': 'building',
+                    'filter': ['==', 'extrude', 'true'],
+                    'type': 'fill-extrusion',
+                    'minzoom': 15,
+                    'paint': {
+                        'fill-extrusion-color': '#ffffff',
+                        'fill-extrusion-height': [
+                            'interpolate',
+                            ['linear'],
+                            ['zoom'],
+                            15,
+                            0,
+                            15.05,
+                            ['get', 'height']
+                        ],
+                        'fill-extrusion-base': [
+                            'interpolate',
+                            ['linear'],
+                            ['zoom'],
+                            15,
+                            0,
+                            15.05,
+                            ['get', 'min_height']
+                        ],
+                        'fill-extrusion-opacity': 0.6
+                    }
+                },
+                labelLayerId
+            );
+        });
+
+        let currentTourIndex = 0;
+        const tourRouteKeys = monumentData.map(m => m.key); 
+        const monuments = [];
+
+        function createCustomPopup(monument) {
+            const popup = new mapboxgl.Popup({ offset: 40, closeButton: false, closeOnClick: false, maxWidth: '350px' })
+                .setHTML(`
+                    <div class="popup-content">
+                        <div class="popup-text-area">
+                            <h3 class="popup-title">${monument.name}</h3>
+                            <div class="popup-body">${monument.description}</div>
+                        </div>
+                        <button class="close-tour-btn" data-key="${monument.key}">
+                            ${monument.key === tourRouteKeys[tourRouteKeys.length - 1] ? 'Finish Tour ↺' : 'Next Stop →'}
+                        </button>
+                    </div>
+                `);
+            monument.popup = popup;
+            return popup;
+        }
+
+        function flyToAndOpenPopup(monument) {
+            if (!monument) return;
+
+            // 1. 关闭之前打开的所有弹窗
+            monuments.forEach(m => m.marker.getPopup().remove());
+
+            // 2. 飞行动画
+            map.flyTo({
+                center: [monument.lng, monument.lat],
+                zoom: 17.5,
+                speed: 0.8, // 速度
+                curve: 1,
+                pitch: 65,  
+                bearing: 20, 
+                essential: true
+            });
+
+            // 3. 飞行结束后打开弹窗 (使用 'moveend' 事件更精准，但也保留定时器双重保险)
+            map.once('moveend', () => {
+                const currentMarker = monuments.find(m => m.key === monument.key);
+                if (currentMarker && currentMarker.marker) {
+                     currentMarker.marker.getPopup().addTo(map);
+                }
+            });
+        }
+
+        function nextStop() {
+            if (currentTourIndex >= tourRouteKeys.length - 1) {
+                // 结束巡游，回到概览
+                map.flyTo({center: [-3.7038, 40.4168], zoom: 13, pitch: 45, bearing: 0, essential: true});
+                currentTourIndex = 0; 
+                // 关闭所有弹窗
+                monuments.forEach(m => m.marker.getPopup().remove());
+                // 显示重新开始按钮（可选，这里简单处理为回到起点状态）
+                return;
+            }
+
+            currentTourIndex++;
+            const nextKey = tourRouteKeys[currentTourIndex];
+            const nextMonument = monuments.find(m => m.key === nextKey);
+            flyToAndOpenPopup(nextMonument);
+        }
+
+        map.on('load', () => {
+            monumentData.forEach((monument) => {
+                const el = document.createElement('div');
+                el.className = 'marker';
+                el.dataset.key = monument.key; 
+
+                const markerInstance = new mapboxgl.Marker(el)
+                    .setLngLat([monument.lng, monument.lat])
+                    .setPopup(createCustomPopup(monument)) 
+                    .addTo(map);
+                
+                monuments.push({ ...monument, marker: markerInstance });
+
+                // 点击标记也可以触发
+                el.addEventListener('click', () => {
+                    // 更新当前索引，防止逻辑乱掉
+                    currentTourIndex = tourRouteKeys.indexOf(monument.key);
+                    flyToAndOpenPopup(monument);
+                });
+            });
+        });
+
+        // 绑定“开始”按钮
+        document.getElementById('start-btn').addEventListener('click', () => {
+            document.getElementById('intro-overlay').style.display = 'none';
+            currentTourIndex = 0;
+            const firstKey = tourRouteKeys[0];
+            const firstMonument = monuments.find(m => m.key === firstKey);
+            flyToAndOpenPopup(firstMonument);
+        });
+
+        // 绑定弹窗内的“下一步”按钮
+        document.addEventListener('click', (e) => {
+            if (e.target && e.target.classList.contains('close-tour-btn')) {
+                nextStop();
+            }
+        });
+
+        map.on('error', (e) => {
+            console.error("Mapbox 错误:", e);
+            if (e.error && e.error.status === 401) {
+                alert("地图加载失败：Token 无效。请编辑 HTML 文件，替换为您自己的 Mapbox Token。");
+            }
+        });
+
+    } catch (err) {
+        alert("程序发生错误：" + err.message);
+    }
+</script>
+</body>
+</html>
